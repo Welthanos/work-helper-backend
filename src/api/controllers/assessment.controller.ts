@@ -1,11 +1,11 @@
 import { Request, Response } from 'express';
 import db from '../../config/db';
-import { calculateLombalgiaRisk, getRecommendationCodes } from '../../utils/assessment.utils';
+import { calculateLombalgyRisk, getRecommendationCodes } from '../../utils/assessment.utils';
 import { RecommendationRow } from '../../interfaces/assessment.interfaces';
 
 export const createAssessment = async (req: Request, res: Response) => {
     const userId = req.user.id;
-
+    console.log(req.body)
     const { survey_id, worker_details, assessment_details, assessment_date } = req.body;
     if (!survey_id || !worker_details || !assessment_details) return res.status(400).json({ message: 'Dados insuficientes para criar a avaliação.' });
 
@@ -31,7 +31,7 @@ export const createAssessment = async (req: Request, res: Response) => {
             workerId = newWorker.rows[0].id;
         }
 
-        const calculated_risk = calculateLombalgiaRisk(assessment_details);
+        const calculated_risk = calculateLombalgyRisk(assessment_details);
         const assessmentQuery = `
             INSERT INTO assessments (
                 user_id, survey_id, worker_id, assessment_date, worker_age, worker_weight_kg, 
@@ -62,6 +62,7 @@ export const createAssessment = async (req: Request, res: Response) => {
         res.status(201).json(finalAssessmentData);
     } catch (error) {
         await client.query('ROLLBACK');
+        console.log(error)
         res.status(500).json({ message: 'Erro interno ao criar avaliação.' });
     } finally {
         client.release();
@@ -72,7 +73,7 @@ export const updateAssessment = async (req: Request, res: Response) => {
     const userId = req.user.id;
     const { id: assessmentId } = req.params;
     const { worker_details, assessment_details, assessment_date } = req.body;
-
+    console.log(req.body)
     if (!worker_details || !assessment_details || !worker_details.cpf) return res.status(400).json({ message: 'Dados insuficientes para atualizar a avaliação.' });
 
     const client = await db.connect();
@@ -97,7 +98,7 @@ export const updateAssessment = async (req: Request, res: Response) => {
             correctWorkerId = newWorker.rows[0].id;
         }
 
-        const calculated_risk = calculateLombalgiaRisk(assessment_details);
+        const calculated_risk = calculateLombalgyRisk(assessment_details);
         const updateQuery = `
             UPDATE assessments SET 
                 worker_id = $1, assessment_date = $2, worker_age = $3, worker_weight_kg = $4, 

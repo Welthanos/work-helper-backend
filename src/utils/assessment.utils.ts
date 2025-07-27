@@ -1,18 +1,23 @@
-export function calculateLombalgiaRisk(details: any): number {
-    const { load_unitization_n, has_package_grip, load_weight_kg, distance_traveled_m, trunk_flexion_angle, trunk_rotation_angle } = details;
+export function calculateLombalgyRisk(details: any): number {
+    const { worker_age, load_unitization_n, has_package_grip, trunk_flexion_angle, trunk_rotation_angle, distance_traveled_m, lifting_frequency_per_min, load_weight_kg, work_shift_hours, service_time_years, worker_weight_kg } = details;
 
-    const gX = -178.81 +
-        (2.92 * load_unitization_n) +
-        (1.28 * has_package_grip ? 1 : 0) +
-        (0.77 * load_weight_kg) +
-        (0.71 * distance_traveled_m) +
-        (0.67 * trunk_flexion_angle) +
-        (0.35 * trunk_rotation_angle) +
-        (0.16 * load_unitization_n);
+    const gX = -271 +
+        (1.85 * worker_age) +
+        (2.83 * load_unitization_n) +
+        (1.54 * has_package_grip ? 1 : 0) +
+        (1.39 * trunk_flexion_angle) +
+        (1.21 * trunk_rotation_angle) +
+        (0.85 * distance_traveled_m) +
+        (0.77 * lifting_frequency_per_min) +
+        (0.63 * load_weight_kg) +
+        (0.45 * work_shift_hours) +
+        (0.29 * service_time_years) +
+        (0.13 * worker_weight_kg);
 
     const pY = 1 / (1 + Math.exp(-gX));
+    const calculatedRisk = Number((pY * 100).toFixed(2));
 
-    return pY >= 0.5 ? 100 : 0;
+    return calculatedRisk;
 }
 
 export function getRecommendationCodes(details: any, sex: 'M' | 'F'): string[] {
