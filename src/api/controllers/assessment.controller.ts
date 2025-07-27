@@ -5,7 +5,7 @@ import { RecommendationRow } from '../../interfaces/assessment.interfaces';
 
 export const createAssessment = async (req: Request, res: Response) => {
     const userId = req.user.id;
-    console.log(req.body)
+
     const { survey_id, worker_details, assessment_details, assessment_date } = req.body;
     if (!survey_id || !worker_details || !assessment_details) return res.status(400).json({ message: 'Dados insuficientes para criar a avaliação.' });
 
@@ -24,6 +24,7 @@ export const createAssessment = async (req: Request, res: Response) => {
 
         let workerId;
         const existingWorker = await client.query('SELECT id FROM workers WHERE cpf = $1', [cpf]);
+
         if (existingWorker.rows.length > 0) {
             workerId = existingWorker.rows[0].id;
         } else {
@@ -62,7 +63,6 @@ export const createAssessment = async (req: Request, res: Response) => {
         res.status(201).json(finalAssessmentData);
     } catch (error) {
         await client.query('ROLLBACK');
-        console.log(error)
         res.status(500).json({ message: 'Erro interno ao criar avaliação.' });
     } finally {
         client.release();
@@ -73,65 +73,63 @@ export const updateAssessment = async (req: Request, res: Response) => {
     const userId = req.user.id;
     const { id: assessmentId } = req.params;
     const { worker_details, assessment_details, assessment_date } = req.body;
-    console.log(req.body)
-    if (!worker_details || !assessment_details || !worker_details.cpf) return res.status(400).json({ message: 'Dados insuficientes para atualizar a avaliação.' });
+
+    if (!worker_details || !assessment_details || !worker_details.cpf) {
+        return res.status(400).json({ message: 'Dados insuficientes para atualizar a avaliação.' });
+    }
 
     const client = await db.connect();
     try {
         await client.query('BEGIN');
-        const assessmentCheck = await client.query('SELECT id FROM assessments WHERE id = $1 AND user_id = $2', [assessmentId, userId]);
+
+        const assessmentCheck = await client.query('SELECT worker_id FROM assessments WHERE id = $1 AND user_id = $2', [assessmentId, userId]);
 
         if (assessmentCheck.rows.length === 0) {
             await client.query('ROLLBACK');
             return res.status(404).json({ message: 'Avaliação não encontrada para este usuário.' });
         }
 
-        let correctWorkerId;
+        const { worker_id } = assessmentCheck.rows[0];
         const { cpf, name, sex } = worker_details;
-        const existingWorker = await client.query('SELECT id FROM workers WHERE cpf = $1', [cpf]);
 
-        if (existingWorker.rows.length > 0) {
-            correctWorkerId = existingWorker.rows[0].id;
-            await client.query('UPDATE workers SET name = $1, sex = $2 WHERE id = $3', [name, sex, correctWorkerId]);
-        } else {
-            const newWorker = await client.query('INSERT INTO workers (cpf, name, sex) VALUES ($1, $2, $3) RETURNING id', [cpf, name, sex]);
-            correctWorkerId = newWorker.rows[0].id;
-        }
+        await client.query('UPDATE workers SET cpf = $1, name = $2, sex = $3 WHERE id = $4', [cpf, name, sex, worker_id]);
 
         const calculated_risk = calculateLombalgyRisk(assessment_details);
+
         const updateQuery = `
             UPDATE assessments SET 
-                worker_id = $1, assessment_date = $2, worker_age = $3, worker_weight_kg = $4, 
-                worker_height_m = $5, service_time_years = $6, work_shift_hours = $7, 
-                load_unitization_n = $8, has_package_grip = $9, load_weight_kg = $10, 
-                distance_traveled_m = $11, lifting_frequency_per_min = $12, 
-                trunk_flexion_angle = $13, trunk_rotation_angle = $14, calculated_risk = $15
-            WHERE id = $16
+                assessment_date = $1, worker_age = $2, worker_weight_kg = $3, worker_height_m = $4,
+                service_time_years = $5, work_shift_hours = $6, load_unitization_n = $7,
+                has_package_grip = $8, load_weight_kg = $9, distance_traveled_m = $10,
+                lifting_frequency_per_min = $11, trunk_flexion_angle = $12,
+                trunk_rotation_angle = $13, calculated_risk = $14
+            WHERE id = $15
             RETURNING *;
         `;
         const updateValues = [
-            correctWorkerId, assessment_date, assessment_details.worker_age,
-            assessment_details.worker_weight_kg, assessment_details.worker_height_m,
-            assessment_details.service_time_years, assessment_details.work_shift_hours,
-            assessment_details.load_unitization_n, assessment_details.has_package_grip,
-            assessment_details.load_weight_kg, assessment_details.distance_traveled_m,
-            assessment_details.lifting_frequency_per_min, assessment_details.trunk_flexion_angle,
-            assessment_details.trunk_rotation_angle, calculated_risk, assessmentId
+            assessment_date, assessment_details.worker_age, assessment_details.worker_weight_kg,
+            assessment_details.worker_height_m, assessment_details.service_time_years,
+            assessment_details.work_shift_hours, assessment_details.load_unitization_n,
+            assessment_details.has_package_grip, assessment_details.load_weight_kg,
+            assessment_details.distance_traveled_m, assessment_details.lifting_frequency_per_min,
+            assessment_details.trunk_flexion_angle, assessment_details.trunk_rotation_angle,
+            calculated_risk, assessmentId
         ];
         const { rows } = await client.query(updateQuery, updateValues);
+
         const recommendationCodes = getRecommendationCodes(assessment_details, sex);
-
         await linkRecommendations(client, parseInt(assessmentId, 10), recommendationCodes);
-        await client.query('COMMIT');
 
+        await client.query('COMMIT');
         res.status(200).json(rows[0]);
+
     } catch (error) {
         await client.query('ROLLBACK');
         res.status(500).json({ message: 'Erro interno ao atualizar avaliação.' });
     } finally {
         client.release();
     }
-}
+};
 
 export const getAllAssessmentsBySurvey = async (req: Request, res: Response) => {
     const userId = req.user.id;
