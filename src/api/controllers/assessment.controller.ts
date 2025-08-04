@@ -163,11 +163,26 @@ export const getAssessmentById = async (req: Request, res: Response) => {
             JOIN workers w ON a.worker_id = w.id
             WHERE a.id = $1 AND a.user_id = $2
         `;
-        const { rows } = await db.query(assessmentQuery, [id, userId]);
-        if (rows.length === 0) return res.status(404).json({ message: 'Avaliação não encontrada para este usuário.' });
+        const assessmentResult = await db.query(assessmentQuery, [id, userId]);
 
-        res.status(200).json(rows[0]);
+        if (assessmentResult.rows.length === 0) {
+            return res.status(404).json({ message: 'Avaliação não encontrada para este usuário.' });
+        }
+
+        const recommendationsQuery = `
+            SELECT r.recommendation_code, r.description
+            FROM recommendations r
+            JOIN assessment_recommendations ar ON r.id = ar.recommendation_id
+            WHERE ar.assessment_id = $1
+        `;
+        const recommendationsResult = await db.query(recommendationsQuery, [id]);
+
+        const assessmentData = assessmentResult.rows[0];
+        assessmentData.recommendations = recommendationsResult.rows;
+
+        res.status(200).json(assessmentData);
     } catch (error) {
+        console.error(error);
         res.status(500).json({ message: 'Erro ao buscar avaliação.' });
     }
 }
